@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Worksheet Generator</title>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- pdf.js for PDF parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script>
+        // Set worker script path for pdf.js to ensure PDF parsing works reliably
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+        }
+    </script>
+    <!-- mammoth.js for .docx parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Updated background to a blueish-dark gradient from presentation.html */
+            background: linear-gradient(135deg, #0A1931, #15324B, #0A1931);
+            background-attachment: fixed;
+            color: #e0e0e0; /* Lighter text for dark background */
+            margin: 0;
+            padding: 20px;
+            position: relative; /* For particle positioning */
+            min-height: 100vh; /* Ensure body takes full viewport height */
+            /* Removed overflow: hidden to allow scrolling */
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(31, 41, 55, 0.8); /* Card background from presentation.html */
+            backdrop-filter: blur(10px);
+            border-radius: 20px; /* Rounded corners from presentation.html */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); /* Shadow from presentation.html */
+            border: 1px solid rgba(255, 255, 255, 0.1); /* Border from presentation.html */
+            padding: 30px;
+            position: relative; /* Ensure container is above particles */
+            z-index: 10;
+        }
+        h1 {
+            text-align: center;
+            color: #22d3ee; /* Gradient text start color from presentation.html */
+            background: linear-gradient(90deg, #22d3ee, #0ea5e9, #3b82f6); /* Gradient text from presentation.html */
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            font-size: 3.5rem; /* Increased title size */
+            margin-bottom: 1rem; /* Added margin for spacing */
+        }
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 1.25rem; /* Increased subtitle size */
+            margin-bottom: 2rem; /* Added margin for spacing */
+        }
+        .form-section {
+            background-color: rgba(40, 50, 60, 0.7); /* Slightly darker, semi-transparent */
+            padding: 20px;
+            border-radius: 10px; /* More rounded */
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #c0c0c0; /* Lighter label color */
+        }
+        input[type="text"],
+        input[type="file"], /* Added file input styling */
+        select { /* Added select to styling */
+        input[type="number"],
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #555; /* Darker border */
+            border-radius: 8px; /* More rounded */
+            box-sizing: border-box;
+            background-color: #333; /* Darker input background */
+            color: #eee; /* Lighter input text */
+        }
+        /* Specific styling for file input button */
+        input[type="file"]::file-selector-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: background-color 0.2s;
+        }
+        input[type="file"]::file-selector-button:hover {
+            background: #2563eb;
+        }
+        select {
+            appearance: none; /* Remove default select arrow */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23e0e0e0'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3E%3Csvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.7rem center;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem; /* Make space for the custom arrow */
+        }
+        .checkbox-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* Adjusted for checkbox + select */
+            gap: 15px; /* Increased gap for better spacing */
+        }
+        .question-type-item {
+            display: flex;
+            align-items: center;
+            gap: 10px; /* Space between checkbox/label and select */
+            background-color: rgba(50, 60, 70, 0.7); /* Slightly different background for each item */
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .question-type-item label {
+            margin-bottom: 0; /* Remove bottom margin for inline labels */
+            flex-grow: 1; /* Allow label to take available space */
+            font-weight: normal;
+            color: #e0e0e0;
+        }
+        .question-type-item input[type="checkbox"] {
+            width: auto; /* Reset width for checkbox */
+        }
+        .question-type-item select {
+            width: 80px; /* Fixed width for the number dropdown */
+            padding: 8px;
+            font-size: 0.9em;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(to right, #3b82f6, #0ea5e9); /* Gradient button from presentation.html */
+            color: white;
+            border: none;
+            border-radius: 10px; /* More rounded */
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease; /* Smooth transition */
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); /* Glow from presentation.html */
+        }
+        .btn:hover {
+            background-color: #2980b9;
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.8); /* Stronger glow on hover */
+            transform: translateY(-2px); /* Slight lift on hover */
+        }
+        .btn:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+        #export-btn {
+            background: linear-gradient(to right, #27ae60, #2ecc71); /* Green gradient for export */
+            margin-top: 20px;
+            box-shadow: 0 0 15px rgba(46, 204, 113, 0.5);
+        }
+        #export-btn:hover {
+            background-color: #229954;
+            box-shadow: 0 0 25px rgba(46, 204, 113, 0.8);
+        }
+        .loader {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loader .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2); /* Light grey border for the circle */
+            border-top-color: #3498db; /* Blue top border for the spinning effect */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #error-message {
+            color: #e74c3c;
+            text-align: center;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+        
+        /* Worksheet Styles */
+        #worksheet-output {
+            border: 1px solid #555;
+            padding: 25px;
+            margin-top: 20px;
+            border-radius: 10px;
+            background-color: rgba(255, 255, 255, 0.05); /* Slightly transparent white */
+            color: #e0e0e0;
+        }
+        .worksheet-title {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #22d3ee; /* Gradient text start color */
+            background: linear-gradient(90deg, #22d3ee, #0ea5e9, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .activity-block {
+            margin-bottom: 30px;
+            cursor: grab; /* Indicate draggable */
+            transition: all 0.2s ease-in-out; /* Smooth transitions for drag effects */
+        }
+        .activity-block:active {
+            cursor: grabbing;
+        }
+        .activity-block.dragging {
+            opacity: 0.5; /* Make the dragged item semi-transparent */
+            border: 2px dashed #0ea5e9; /* Add a dashed border */
+        }
+        .activity-block.drag-over {
+            border: 2px solid #22d3ee; /* Highlight the drop target */
+            box-shadow: 0 0 10px rgba(34, 211, 238, 0.7);
+        }
+        .activity-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #0ea5e9; /* Blue accent */
+        }
+        .activity-directions {
+            font-style: italic;
+            margin-bottom: 15px;
+            color: #c0c0c0;
+        }
+        .question {
+            margin-bottom: 15px;
+        }
+        .mc-option {
+            margin-left: 20px;
+        }
+        .blank-space {
+            display: inline-block;
+            width: 100px;
+            border-bottom: 1px solid #777; /* Darker blank space */
+            margin-right: 5px;
+        }
+        .matching-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .matching-table th, .matching-table td {
+            border: 1px solid #777;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+        .matching-table th {
+            background-color: rgba(255, 255, 255, 0.1); /* Semi-transparent header */
+            color: #eee;
+        }
+        .col-a { width: 45%; }
+        .col-b { width: 55%; }
+        
+        /* Hidden styles for export */
+        .hidden-for-export {
+            display: none;
+        }
+
+        /* Styles for floating particles from presentation.html */
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(20px, -20px) rotate(5deg); }
+            50% { transform: translate(0, -40px) rotate(0deg); }
+            75% { transform: translate(-20px, -20px) rotate(-5deg); }
+        }
+        .particle {
+            animation-delay: calc(-1s * var(--delay));
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.5;
+            z-index: 1; /* Below the main content */
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .logo {
+            display: block;
+            margin: 0 auto 20px auto; /* Center the logo and add bottom margin */
+            max-width: 250px; /* Increased logo size */
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Floating particles background -->
+    <div class="absolute inset-0 overflow-hidden">
+        <!-- Particles will be dynamically added here by JavaScript -->
+    </div>
+
+    <div class="container">
+        <!-- Menu Button -->
+        <div class="absolute top-4 left-4 z-20">
+            <a href="index.html" class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300 transform hover:scale-105 shadow-md">
+                Menu
+            </a>
+        </div>
+
+        <!-- Logo -->
+        <img src="images/tudloai.png" alt="TudloAI Logo" class="logo" onerror="this.onerror=null;this.src='https://placehold.co/250x100/0A1931/FFFFFF?text=TudloAI+Logo';">
+        <!-- NOTE: Replace the src above with your actual image path: "images/tudloai.png" -->
+
+        <h1>AI Worksheet Generator</h1>
+        <p class="subtitle">Enter a topic, select question types, and get a custom worksheet in seconds.</p>
+
+        <form id="worksheet-form" class="form-section">
+            <div class="form-group">
+                <label for="topic">Worksheet Topic</label>
+                <input type="text" id="topic" placeholder="e.g., Photosynthesis, The Roman Empire, Mixtures" required>
+            </div>
+
+            <!-- NEW: File Upload Section -->
+            <div class="form-group">
+                <label for="file-upload">Upload Learning Material (Optional, PDF/DOCX)</label>
+                <input type="file" id="file-upload" accept=".pdf,.docx">
+                <p id="file-info" class="text-xs text-gray-400 mt-1"></p>
+            </div>
+            
+            <div class="form-group">
+                <label for="language-select">Language</label>
+                <select id="language-select">
+                    <option value="English">English</option>
+                    <option value="Filipino">Filipino</option>
+                </select>
+            </div>
+
+            <!-- LOTS/HOTS Distribution Section -->
+            <div class="form-group">
+                <div class="flex items-center gap-2 mb-2">
+                    <input type="checkbox" id="enable-hots-lots-toggle" class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500">
+                    <label for="enable-hots-lots-toggle" style="margin-bottom: 0; cursor: pointer;">Enable LOTS/HOTS Distribution</label>
+                </div>
+                
+                <div id="hots-lots-inputs" class="hidden pl-4 border-l-2 border-blue-500 mt-2 ml-1">
+                    <p class="text-xs text-gray-400 mb-3">Customize the ratio of Lower Order vs Higher Order Thinking Skills questions.</p>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="lots-percentage" class="text-xs uppercase font-bold text-gray-400 mb-1 block">LOTS (Recall)</label>
+                            <div class="relative">
+                                <input type="number" id="lots-percentage" class="w-full p-2 bg-[#333] border border-[#555] rounded-lg text-[#eee] text-sm" placeholder="50" min="0" max="100" value="50">
+                                <span class="absolute right-8 top-2 text-gray-400 text-sm">%</span>
+                            </div>
+                            <p class="text-[10px] text-gray-500 mt-1">Who, What, When, Where</p>
+                        </div>
+                        <div>
+                            <label for="hots-percentage" class="text-xs uppercase font-bold text-gray-400 mb-1 block">HOTS (Analysis)</label>
+                            <div class="relative">
+                                <input type="number" id="hots-percentage" class="w-full p-2 bg-[#333] border border-[#555] rounded-lg text-[#eee] text-sm" placeholder="50" min="0" max="100" value="50">
+                                <span class="absolute right-8 top-2 text-gray-400 text-sm">%</span>
+                            </div>
+                            <p class="text-[10px] text-gray-500 mt-1">Application, Evaluation</p>
+                        </div>
+                    </div>
+                    <p id="hots-lots-error" class="text-xs text-red-400 font-bold hidden mt-2">Total percentage must equal 100%.</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Question Types and Number of Questions</label>
+                <div class="checkbox-group">
+                    <div class="question-type-item">
+                        <input type="checkbox" id="mc" value="Multiple Choice" checked> 
+                        <label for="mc">Multiple Choice</label>
+                        <select class="num-questions-per-type" data-type="Multiple Choice">
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="20">20</option>
+                        </select>
+                    </div>
+                    <div class="question-type-item">
+                        <input type="checkbox" id="id" value="Identification" checked> 
+                        <label for="id">Identification</label>
+                        <select class="num-questions-per-type" data-type="Identification">
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="20">20</option>
+                        </select>
+                    </div>
+                    <div class="question-type-item">
+                        <input type="checkbox" id="tf" value="True or False" checked> 
+                        <label for="tf">True or False</label>
+                        <select class="num-questions-per-type" data-type="True or False">
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="20">20</option>
+                        </select>
+                    </div>
+                    <div class="question-type-item">
+                        <input type="checkbox" id="match" value="Matching Type" checked> 
+                        <label for="match">Matching Type</label>
+                        <select class="num-questions-per-type" data-type="Matching Type">
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="20">20</option>
+                        </select>
+                    </div>
+                    <div class="question-type-item">
+                        <input type="checkbox" id="sa" value="Short Answer"> 
+                        <label for="sa">Short Answer</label>
+                        <select class="num-questions-per-type" data-type="Short Answer" disabled>
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="20">20</option>
+                        </select>
+                    </div>
+                    <div class="question-type-item">
+                        <input type="checkbox" id="essay" value="Essay"> 
+                        <label for="essay">Essay</label>
+                        <select class="num-questions-per-type" data-type="Essay" disabled>
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="20">20</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" id="generate-btn" class="btn pulse">Generate Worksheet</button>
+        </form>
+
+        <div id="loader" class="loader">
+            <div class="spinner"></div>
+            <p>AI is generating your worksheet... Please wait.</p>
+        </div>
+
+        <div id="error-message"></div>
+
+        <div id="worksheet-container">
+            <div id="worksheet-output"></div>
+            <!-- This hidden div will store the answer key for export -->
+            <div id="answer-key-output" class="hidden-for-export"></div>
+            <button id="export-btn" class="btn" style="display: none;">Export to .doc</button>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('worksheet-form');
+        const generateBtn = document.getElementById('generate-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const loader = document.getElementById('loader');
+        const errorMessage = document.getElementById('error-message');
+        const worksheetOutput = document.getElementById('worksheet-output');
+        const answerKeyOutput = document.getElementById('answer-key-output');
+        const topicInput = document.getElementById('topic');
+        const fileUploadInput = document.getElementById('file-upload'); // New element
+        const fileInfo = document.getElementById('file-info'); // New element
+        const questionTypeCheckboxes = document.querySelectorAll('.checkbox-group input[type="checkbox"]');
+        const numQuestionsSelects = document.querySelectorAll('.num-questions-per-type');
+        const languageSelect = document.getElementById('language-select');
+
+        // LOTS/HOTS Elements
+        const enableHotsLotsToggle = document.getElementById('enable-hots-lots-toggle');
+        const hotsLotsInputs = document.getElementById('hots-lots-inputs');
+        const lotsPercentageInput = document.getElementById('lots-percentage');
+        const hotsPercentageInput = document.getElementById('hots-percentage');
+        const hotsLotsError = document.getElementById('hots-lots-error');
+
+        if (enableHotsLotsToggle) {
+            enableHotsLotsToggle.addEventListener('change', () => {
+                if (enableHotsLotsToggle.checked) hotsLotsInputs.classList.remove('hidden');
+                else hotsLotsInputs.classList.add('hidden');
+            });
+        }
+        if (lotsPercentageInput && hotsPercentageInput) {
+            lotsPercentageInput.addEventListener('input', () => {
+                let val = parseInt(lotsPercentageInput.value) || 0;
+                if (val > 100) val = 100; if (val < 0) val = 0;
+                hotsPercentageInput.value = 100 - val;
+                hotsLotsError.classList.add('hidden');
+            });
+            hotsPercentageInput.addEventListener('input', () => {
+                let val = parseInt(hotsPercentageInput.value) || 0;
+                if (val > 100) val = 100; if (val < 0) val = 0;
+                lotsPercentageInput.value = 100 - val;
+                hotsLotsError.classList.add('hidden');
+            });
+        }
+
+        // --- Firebase Setup ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDRvLA_rS-eb9aOeUBilKEtX7d1Mu5tj4Q",
+            authDomain: "tudlo-ai.firebaseapp.com",
+            projectId: "tudlo-ai",
+            storageBucket: "tudlo-ai.firebasestorage.app",
+            messagingSenderId: "866233327777",
+            appId: "1:866233327777:web:8531aca6d2e0297e1650e0",
+            measurementId: "G-N74WE2N0SP"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        /**
+         * Fetches a random API key.
+         * @returns {Promise<string|null>} A promise that resolves with an API key or null.
+         */
+        async function getGeminiApiKey() {
+            try {
+                const snapshot = await db.collection('geminiApiKeys').get();
+                if (snapshot.empty) {
+                    return null;
+                }
+                const keys = snapshot.docs.map(doc => doc.data().key);
+                return keys[Math.floor(Math.random() * keys.length)];
+            } catch (error) {
+                console.error("Error fetching configuration:", error);
+                return null;
+            }
+        }
+        let generatedData = null; // To store the AI response
+        let draggedItem = null; // Global variable to store the currently dragged activity block
+        let uploadedFileContent = ""; // To store text from the uploaded file
+
+        // New Map to store the actively selected question types and their counts
+        const activeQuestionTypes = new Map(); // Map<type, count>
+
+        // NEW: Event listener for file upload
+        fileUploadInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) {
+                uploadedFileContent = "";
+                fileInfo.textContent = "";
+                return;
+            }
+
+            fileInfo.textContent = `Reading file: ${file.name}...`;
+            loader.style.display = 'block'; // Show loader while parsing
+
+            try {
+                if (file.type === 'application/pdf') {
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        const pdfData = new Uint8Array(event.target.result);
+                        const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                        let textContent = '';
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const text = await page.getTextContent();
+                            textContent += text.items.map(item => item.str).join(' ');
+                        }
+                        uploadedFileContent = textContent;
+                        fileInfo.textContent = `✅ Successfully read: ${file.name}`;
+                    };
+                    reader.readAsArrayBuffer(file);
+                } else if (file.name.endsWith('.docx')) {
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        const arrayBuffer = event.target.result;
+                        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                        uploadedFileContent = result.value;
+                        fileInfo.textContent = `✅ Successfully read: ${file.name}`;
+                    };
+                    reader.readAsArrayBuffer(file);
+                } else {
+                    throw new Error("Unsupported file type. Please upload a PDF or DOCX file.");
+                }
+            } catch (error) {
+                console.error("File reading error:", error);
+                errorMessage.textContent = `Error reading file: ${error.message}`;
+                uploadedFileContent = "";
+                fileInfo.textContent = `❌ Failed to read file.`;
+            } finally {
+                 loader.style.display = 'none'; // Hide loader after parsing
+            }
+        });
+
+
+        // Function to initialize and update the activeQuestionTypes map and select disabled state
+        function setupQuestionTypeListeners() {
+            questionTypeCheckboxes.forEach(checkbox => {
+                const type = checkbox.value;
+                const select = checkbox.closest('.question-type-item').querySelector('.num-questions-per-type');
+
+                // Initialize map and select state based on initial checked state
+                if (checkbox.checked) {
+                    activeQuestionTypes.set(type, select.value);
+                    select.disabled = false;
+                } else {
+                    activeQuestionTypes.delete(type);
+                    select.disabled = true;
+                }
+
+                // Event listener for checkbox change
+                checkbox.addEventListener('change', () => {
+                    if (checkbox.checked) {
+                        activeQuestionTypes.set(type, select.value);
+                        select.disabled = false;
+                    } else {
+                        activeQuestionTypes.delete(type);
+                        select.disabled = true;
+                    }
+                });
+
+                // Event listener for select change (only if checkbox is checked)
+                select.addEventListener('change', () => {
+                    if (checkbox.checked) { // Ensure the checkbox is still checked
+                        activeQuestionTypes.set(type, select.value);
+                    }
+                });
+            });
+        }
+
+        // Call the setup function on page load
+        document.addEventListener('DOMContentLoaded', setupQuestionTypeListeners);
+
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const topic = topicInput.value.trim();
+            const selectedLanguage = languageSelect.value;
+            
+            // Build questionTypesConfig from the activeQuestionTypes map
+            const questionTypesConfig = Array.from(activeQuestionTypes.entries()).map(([type, count]) => ({ type, count }));
+
+            if (!topic || questionTypesConfig.length === 0) {
+                errorMessage.textContent = 'Please fill in the topic and select at least one question type.';
+                return;
+            }
+
+            // LOTS/HOTS Validation
+            let hotsLotsConfig = null;
+            if (enableHotsLotsToggle && enableHotsLotsToggle.checked) {
+                const lotsPct = parseInt(lotsPercentageInput.value) || 0;
+                const hotsPct = parseInt(hotsPercentageInput.value) || 0;
+                if (lotsPct + hotsPct !== 100) {
+                    hotsLotsError.classList.remove('hidden');
+                    return;
+                }
+                hotsLotsConfig = { lots: lotsPct, hots: hotsPct };
+            }
+
+            // UI feedback
+            errorMessage.textContent = '';
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+            loader.style.display = 'block';
+            worksheetOutput.innerHTML = ''; // Clear previous worksheet
+            exportBtn.style.display = 'none';
+            generateBtn.classList.remove("pulse");
+            generateBtn.classList.add("opacity-75", "cursor-not-allowed");
+
+            try {
+                const geminiApiKey = await getGeminiApiKey();
+                if (!geminiApiKey) {
+                    throw new Error("A configuration error occurred. Please try again later.");
+                }
+
+                // Pass uploadedFileContent to the prompt creator
+                const prompt = createPrompt(topic, questionTypesConfig, selectedLanguage, uploadedFileContent, hotsLotsConfig);
+                const responseText = await callGeminiAPI(prompt, geminiApiKey);
+                const data = parseAIResponse(responseText);
+                generatedData = data; 
+                
+                renderWorksheet(data, topic);
+                renderAnswerKey();
+                
+                exportBtn.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error:', error);
+                errorMessage.textContent = `An error occurred: ${error.message}. Check the console for details.`;
+            } finally {
+                // Restore UI
+                loader.style.display = 'none';
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Generate Worksheet';
+                generateBtn.classList.remove("opacity-75", "cursor-not-allowed");
+                generateBtn.classList.add("pulse");
+            }
+        });
+
+        exportBtn.addEventListener('click', () => {
+            if (!generatedData) return;
+            exportToDoc(topicInput.value.trim());
+        });
+
+        function createPrompt(topic, questionTypesConfig, language, fileContent, hotsLotsConfig) {
+            let typesList = [];
+            let typeDetails = [];
+
+            questionTypesConfig.forEach(item => {
+                typesList.push(item.type);
+                typeDetails.push(`For "${item.type}", create exactly ${item.count} relevant questions.`);
+            });
+            
+            // NEW: Add context from file if it exists
+            const fileContext = fileContent 
+                ? `
+                ---
+                IMPORTANT CONTEXT FROM UPLOADED FILE:
+                The following text is from a learning material provided by the user.
+                You MUST PRIORITIZE this content when generating the worksheet questions.
+                Base the questions and answers directly on this material.
+                Do not just copy-paste; intelligently create questions based on the provided text.
+                File Content: "${fileContent}"
+                ---
+                `
+                : "";
+
+            let distributionText = "";
+            if (hotsLotsConfig) {
+                distributionText = `
+                DISTRIBUTION INSTRUCTIONS:
+                Strictly adhere to the following distribution of thinking skills across the entire worksheet:
+                - ${hotsLotsConfig.lots}% LOTS (Lower Order Thinking Skills): Focus on basic recall, understanding, and simple application (Who, What, When, Where).
+                - ${hotsLotsConfig.hots}% HOTS (Higher Order Thinking Skills): Focus on analysis, evaluation, and creation.
+                Ensure this ratio is reflected in the complexity of questions across all sections.
+                `;
+            }
+
+            return `
+            You are an expert educator and worksheet creator.
+            Generate a comprehensive worksheet about the topic: "${topic}".
+            Include the following sections in this exact order: ${typesList.join(', ')}.
+            ${typeDetails.join('\n')}
+
+            Ensure a significant portion of the questions, especially for Short Answer and Essay types, are Higher-Order Thinking Skills (HOTS) questions, requiring analysis, synthesis, evaluation, and critical thinking, not just recall.
+            Contextualize the worksheet content to the Filipino local scenario, culture, and examples where appropriate.
+
+            All output, including directions, questions, options, clues, statements, terms, definitions, prompts, and answers, should be primarily in ${language}.
+            ${fileContext}
+            ${distributionText}
+            If the topic or context naturally requires a mix of English and Filipino terms, you may include them, but the overall language of the worksheet should adhere to the selected language.
+
+            Respond with a single, valid JSON object and nothing else. Do not use markdown like \`\`\`json.
+            The JSON object must have a single root key: "worksheet".
+            The "worksheet" value should be an array of objects, where each object represents an activity.
+
+            Each activity object must have:
+            1. A "type" string (e.g., "Multiple Choice", "Identification", "True or False", "Matching Type", "Essay", "Short Answer").
+            2. A "directions" string (e.g., "Directions: Choose the letter of the correct answer.")
+            3. A "questions" array.
+
+            Here is the required structure for the "questions" array for each type:
+            - For "Multiple Choice": [{"question": "...", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "C"}]
+            - For "Identification": [{"clue": "...", "answer": "..."}]
+            - For "True or False": [{"statement": "...", "answer": "..."}]
+            - For "Matching Type": [{"term": "...", "definition": "..."}]
+            - For "Short Answer": [{"question": "...", "answer": "..."}]
+            - For "Essay": [{"prompt": "..."}]
+
+            CRITICAL INSTRUCTIONS:
+            1. For "Multiple Choice", you MUST randomize the correct answer position. Do NOT default to "B" or "A". Ensure the correct answers are evenly distributed among A, B, C, and D.
+            2. Ensure all answers provided are accurate and detailed enough for a teacher's answer key.
+            3. For matching type, make sure the terms and definitions are distinct and not easily guessable.
+            `;
+        }
+
+        async function callGeminiAPI(prompt, apiKey) {
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
+            
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.5,
+                        topK: 1,
+                        topP: 1,
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.json();
+                throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorBody.error.message}`);
+            }
+
+            const data = await response.json();
+            if (!data.candidates || !data.candidates[0].content.parts[0].text) {
+                throw new Error('Invalid response structure from API.');
+            }
+            return data.candidates[0].content.parts[0].text;
+        }
+
+        function parseAIResponse(text) {
+            try {
+                // More robust cleaning of markdown code blocks
+                const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                return JSON.parse(cleanText);
+            } catch (error) {
+                console.error("Failed to parse AI response:", text);
+                throw new Error("AI returned data in an invalid format. Please try generating again.");
+            }
+        }
+        
+        function renderWorksheet(data, topic) {
+            let html = `<div class="worksheet-title">Lesson Worksheet: ${topic}</div>`;
+            
+            data.worksheet.forEach((activity, index) => {
+                html += `<div class="activity-block" draggable="true" id="activity-block-${index}" data-activity-type="${activity.type}" data-original-index="${index}">`; 
+                html += `<div class="activity-title">Activity ${index + 1}: ${activity.type}</div>`;
+                if (activity.directions) {
+                    html += `<div class="activity-directions">${activity.directions}</div>`;
+                }
+
+                switch (activity.type) {
+                    case 'Multiple Choice':
+                        activity.questions.forEach((q, i) => {
+                            html += `<div class="question">___ ${i + 1}. ${q.question}<br>`;
+                            q.options.forEach(opt => {
+                                html += `<div class="mc-option">${opt}</div>`;
+                            });
+                            html += `</div>`;
+                        });
+                        break;
+
+                    case 'Identification':
+                        activity.questions.forEach((q, i) => {
+                            html += `<div class="question"><span class="blank-space"></span> ${i + 1}. ${q.clue}</div>`;
+                        });
+                        break;
+
+                    case 'True or False':
+                        activity.questions.forEach((q, i) => {
+                            html += `<div class="question"><span class="blank-space"></span> ${i + 1}. ${q.statement}</div>`;
+                        });
+                        break;
+                    
+                    case 'Matching Type':
+                        html += `<table class="matching-table">`;
+                        html += `<tr><th>Column A</th><th>Column B</th></tr>`;
+                        const columnBItems = activity.questions.map(q => q.definition);
+                        const shuffledColumnB = columnBItems.slice().sort(() => Math.random() - 0.5);
+                        activity.shuffledDefinitions = shuffledColumnB;
+                        
+                        activity.questions.forEach((q, i) => {
+                            const letter = String.fromCharCode(65 + i);
+                            let definitionText = shuffledColumnB[i];
+                            const letterPrefixRegex = /^[A-Z]\.\s*/;
+                            if (letterPrefixRegex.test(definitionText)) {
+                                definitionText = definitionText.replace(letterPrefixRegex, '');
+                            }
+
+                            html += `<tr>`;
+                            html += `<td class="col-a">___ ${i + 1}. ${q.term}</td>`;
+                            html += `<td class="col-b">${letter}. ${definitionText}</td>`;
+                            html += `</tr>`;
+                        });
+                        html += `</table>`;
+                        break;
+
+                    case 'Short Answer':
+                        activity.questions.forEach((q, i) => {
+                            html += `<div class="question">${i + 1}. ${q.question}<br><br><span class="blank-space" style="width:100%;"></span><br><span class="blank-space" style="width:100%;"></span></div>`;
+                        });
+                        break;
+
+                    case 'Essay':
+                        activity.questions.forEach((q, i) => {
+                            html += `<div class="question">${i + 1}. ${q.prompt}<br><br><span class="blank-space" style="width:100%;"></span><br><span class="blank-space" style="width:100%;"></span><br><span class="blank-space" style="width:100%;"></span><br><span class="blank-space" style="width:100%;"></span></div>`;
+                        });
+                        break;
+                }
+                html += `</div>`;
+            });
+
+            worksheetOutput.innerHTML = html;
+            addDragAndDropListeners();
+            updateActivityNumbers();
+        }
+
+        function renderAnswerKey() {
+            let html = `<div class="worksheet-title" style="font-size: 24px; font-weight: bold;">ANSWER KEY</div>`;
+            
+            const orderedActivityBlocks = worksheetOutput.querySelectorAll('.activity-block');
+
+            orderedActivityBlocks.forEach((block, currentOrderIndex) => {
+                const originalIndex = parseInt(block.dataset.originalIndex);
+                const activity = generatedData.worksheet[originalIndex];
+
+                html += `<div class="activity-block" style="margin-bottom: 20px;">`;
+                html += `<div class="activity-title" style="font-size: 18px; font-weight: bold;">Activity ${currentOrderIndex + 1}: ${activity.type}</div>`;
+                
+                switch (activity.type) {
+                    case 'Matching Type':
+                        const shuffledColumnBForWorksheet = activity.shuffledDefinitions;
+                        const originalColumnA = activity.questions.map(q => q.term);
+                        
+                        originalColumnA.forEach((term, i) => {
+                           const originalDefinition = activity.questions.find(q => q.term === term).definition;
+                           const shuffledIndex = shuffledColumnBForWorksheet.indexOf(originalDefinition);
+                           const correctLetter = String.fromCharCode(65 + shuffledIndex);
+                           html += `<div>${i + 1}. ${correctLetter}</div>`;
+                        });
+                        break;
+
+                    case 'Essay':
+                    case 'Short Answer':
+                         activity.questions.forEach((q, i) => {
+                            html += `<div class="question" style="margin-bottom: 10px;"><b>${i + 1}.</b> ${q.answer || 'Answers will vary.'}</div>`;
+                        });
+                        break;
+
+                    default:
+                        activity.questions.forEach((q, i) => {
+                            html += `<div class="question" style="margin-bottom: 5px;">${i + 1}. ${q.answer}</div>`;
+                        });
+                        break;
+                }
+                html += `</div>`;
+            });
+            answerKeyOutput.innerHTML = html;
+        }
+        
+        function exportToDoc(topic) {
+            let header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' "+
+            "xmlns:w='urn:schemas-microsoft-com:office:word' "+
+            "xmlns='http://www.w3.org/TR/REC-html40'>"+
+            "<head><meta charset='utf-8'><title>Export HTML to Word Document</title>";
+            
+            header += `<style>
+                body { font-family: Calibri, sans-serif; font-size: 11pt; }
+                .worksheet-title { font-size: 16pt; font-weight: bold; text-align: center; margin-bottom: 20px; }
+                .activity-block { margin-bottom: 20px; }
+                .activity-title { font-size: 14pt; font-weight: bold; }
+                .activity-directions { font-style: italic; margin-bottom: 10px; }
+                .question { margin-bottom: 10px; }
+                .mc-option { margin-left: 20px; }
+                .blank-space { display: inline-block; width: 100px; border-bottom: 1px solid #000; }
+                .matching-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                .matching-table th, .matching-table td { border: 1px solid #000; padding: 5px; text-align: left; vertical-align: top; }
+                .matching-table th { background-color: #f2f2f2; }
+                .col-a { width: 45%; } .col-b { width: 55%; }
+            </style></head><body>`;
+            
+            const orderedActivityBlocks = Array.from(worksheetOutput.children).filter(el => el.classList.contains('activity-block'));
+            let worksheetContent = '';
+            orderedActivityBlocks.forEach(block => {
+                worksheetContent += block.outerHTML;
+            });
+
+            renderAnswerKey(); 
+            let answerKeyContent = document.getElementById('answer-key-output').innerHTML;
+
+            let pageBreak = '<br clear="all" style="mso-special-character:line-break;page-break-before:always">';
+
+            let footer = "</body></html>";
+            
+            let sourceHTML = header + worksheetContent + pageBreak + answerKeyContent + footer;
+
+            let source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+            let fileDownload = document.createElement("a");
+            document.body.appendChild(fileDownload);
+            fileDownload.href = source;
+            let fileName = topic.replace(/ /g, '_') + '_Worksheet.doc';
+            fileDownload.download = fileName;
+            fileDownload.click();
+            document.body.removeChild(fileDownload);
+        }
+
+        // Drag and Drop Functions
+        function addDragAndDropListeners() {
+            const activityBlocks = document.querySelectorAll('.activity-block');
+
+            activityBlocks.forEach(block => {
+                block.addEventListener('dragstart', handleDragStart);
+                block.addEventListener('dragover', handleDragOver);
+                block.addEventListener('dragenter', handleDragEnter);
+                block.addEventListener('dragleave', handleDragLeave);
+                block.addEventListener('drop', handleDrop);
+                block.addEventListener('dragend', handleDragEnd);
+            });
+        }
+
+        function handleDragStart(e) {
+            draggedItem = e.target;
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => {
+                draggedItem.classList.add('dragging');
+            }, 0);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const dropTarget = e.target.closest('.activity-block');
+            if (dropTarget && dropTarget !== draggedItem && !dropTarget.classList.contains('drag-over')) {
+                document.querySelectorAll('.activity-block.drag-over').forEach(el => el.classList.remove('drag-over'));
+                dropTarget.classList.add('drag-over');
+            }
+        }
+
+        function handleDragEnter(e) {
+            e.preventDefault();
+        }
+
+        function handleDragLeave(e) {
+            if (e.target.closest('.activity-block')) {
+                e.target.closest('.activity-block').classList.remove('drag-over');
+            }
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const dropTarget = e.target.closest('.activity-block');
+
+            if (draggedItem && dropTarget && draggedItem !== dropTarget) {
+                const container = worksheetOutput;
+                const draggedIndex = Array.from(container.children).indexOf(draggedItem);
+                const dropIndex = Array.from(container.children).indexOf(dropTarget);
+
+                if (draggedIndex < dropIndex) {
+                    container.insertBefore(draggedItem, dropTarget.nextSibling);
+                } else {
+                    container.insertBefore(draggedItem, dropTarget);
+                }
+                updateActivityNumbers();
+                renderAnswerKey();
+            }
+            document.querySelectorAll('.activity-block.drag-over').forEach(el => el.classList.remove('drag-over'));
+        }
+
+        function handleDragEnd(e) {
+            if (draggedItem) {
+                draggedItem.classList.remove('dragging');
+            }
+            draggedItem = null;
+            document.querySelectorAll('.activity-block.drag-over').forEach(el => el.classList.remove('drag-over'));
+            updateActivityNumbers();
+            renderAnswerKey();
+        }
+
+        function updateActivityNumbers() {
+            const activityBlocks = worksheetOutput.querySelectorAll('.activity-block');
+            activityBlocks.forEach((block, index) => {
+                const titleElement = block.querySelector('.activity-title');
+                if (titleElement) {
+                    const activityType = block.dataset.activityType;
+                    titleElement.textContent = `Activity ${index + 1}: ${activityType}`;
+                }
+            });
+        }
+
+        function createParticles() {
+            const container = document.querySelector('.absolute.inset-0'); 
+            const colors = ['rgba(59, 130, 246, 0.5)', 'rgba(34, 211, 238, 0.5)', 'rgba(14, 165, 233, 0.5)'];
+            
+            for (let i = 0; i < 15; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add('particle'); 
+                
+                const size = Math.random() * 20 + 5;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                const posX = Math.random() * 100;
+                const posY = Math.random() * 100;
+                const duration = Math.random() * 20 + 10;
+                
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.background = color;
+                particle.style.left = `${posX}%`;
+                particle.style.top = `${posY}%`;
+                particle.style.animation = `float ${duration}s infinite ease-in-out`;
+                particle.style.setProperty('--delay', Math.random() * 5); 
+                
+                container.appendChild(particle);
+            }
+        }
+        
+        createParticles();
+
+    </script>
+</body>
+</html>
